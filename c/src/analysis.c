@@ -27,8 +27,8 @@ INLINE Token *tk_set(Token *tk,
     return tk;
 }
 
-INLINE Token *tk_set_ts(Token *tk,
-                        char *start, char *end, char *text, int pos_inc)
+static INLINE Token *tk_set_ts(Token *tk, char *start, char *end,
+                               char *text, int pos_inc)
 {
     return tk_set(tk, start, (int)(end - start),
                   (off_t)(start - text), (off_t)(end - text), pos_inc);
@@ -40,8 +40,8 @@ INLINE Token *tk_set_no_len(Token *tk,
     return tk_set(tk, text, (int)strlen(text), start, end, pos_inc);
 }
 
-INLINE Token *w_tk_set(Token *tk, wchar_t *text, off_t start, off_t end,
-                       int pos_inc)
+static INLINE Token *w_tk_set(Token *tk, wchar_t *text, off_t start,
+                              off_t end, int pos_inc)
 {
     int len = wcstombs(tk->text, text, MAX_WORD_SIZE - 1);
     tk->text[len] = '\0';
@@ -121,7 +121,7 @@ TokenStream *ts_clone_size(TokenStream *orig_ts, size_t size)
 
 TokenStream *ts_new_i(size_t size)
 {
-    TokenStream *ts = ecalloc(size);
+    TokenStream *ts = (TokenStream *)ecalloc(size);
 
     ts->destroy_i = (void (*)(TokenStream *))&free;
     ts->reset = &ts_reset;
@@ -152,7 +152,7 @@ static TokenStream *cts_new()
 
 #define MBTS(token_stream) ((MultiByteTokenStream *)(token_stream))
 
-INLINE int mb_next_char(wchar_t *wchr, const char *s, mbstate_t *state)
+static INLINE int mb_next_char(wchar_t *wchr, const char *s, mbstate_t *state)
 {
     int num_bytes;
     if ((num_bytes = (int)mbrtowc(wchr, s, MB_CUR_MAX, state)) < 0) {
@@ -180,7 +180,7 @@ static TokenStream *mb_ts_clone_i(TokenStream *orig_ts)
     return ts_clone_size(orig_ts, sizeof(MultiByteTokenStream));
 }
 
-TokenStream *mb_ts_new()
+static TokenStream *mb_ts_new()
 {
     TokenStream *ts = ts_new(MultiByteTokenStream);
     ts->reset = &mb_ts_reset;
@@ -414,7 +414,7 @@ Analyzer *mb_whitespace_analyzer_new(bool lowercase)
 /*
  * LetterTokenizer
  */
-Token *lt_next(TokenStream *ts)
+static Token *lt_next(TokenStream *ts)
 {
     char *start;
     char *t = ts->t;
@@ -446,7 +446,7 @@ TokenStream *letter_tokenizer_new()
 /*
  * Multi-byte LetterTokenizer
  */
-Token *mb_lt_next(TokenStream *ts)
+static Token *mb_lt_next(TokenStream *ts)
 {
     int i;
     char *start;
@@ -478,7 +478,7 @@ Token *mb_lt_next(TokenStream *ts)
 /*
  * Lowercasing Multi-byte LetterTokenizer
  */
-Token *mb_lt_next_lc(TokenStream *ts)
+static Token *mb_lt_next_lc(TokenStream *ts)
 {
     int i;
     char *start;
@@ -759,8 +759,9 @@ static int mb_std_get_apostrophe(char *input)
     return (int)(t - input);
 }
 
-static int std_get_url(char *input, char *token, int i)
+static char *std_get_url(char *input, char *token, int i, int *len)
 {
+    char *next = NULL;
     while (isurlc(input[i])) {
         if (isurlpunc(input[i]) && isurlpunc(input[i - 1])) {
             break; /* can't have two puncs in a row */
@@ -770,13 +771,21 @@ static int std_get_url(char *input, char *token, int i)
         }
         i++;
     }
+    next = input + i;
+
+    /* We don't want to index past the end of the token capacity) */
+    if (i >= MAX_WORD_SIZE) {
+        i = MAX_WORD_SIZE - 1;
+    }
 
     /* strip trailing puncs */
     while (isurlpunc(input[i - 1])) {
         i--;
     }
+    *len = i;
+    token[i] = '\0';
 
-    return i;
+    return next;
 }
 
 /* Company names can contain '@' and '&' like AT&T and Excite@Home. Let's
@@ -909,6 +918,7 @@ static Token *std_next(TokenStream *ts)
         /* check for a known url start */
         token[token_i] = '\0';
         t += 3;
+        token_i += 3;
         while (*t == '/') {
             t++;
         }
@@ -917,16 +927,15 @@ static Token *std_next(TokenStream *ts)
              memcmp(token, "http", 4) == 0 ||
              memcmp(token, "https", 5) == 0 ||
              memcmp(token, "file", 4) == 0)) {
-            len = std_get_url(t, token, 0); /* dispose of first part of the URL */
+            ts->t = std_get_url(t, token, 0, &len); /* dispose of first part of the URL */
         }
         else {              /* still treat as url but keep the first part */
             token_i = (int)(t - start);
             memcpy(token, start, token_i * sizeof(char));
-            len = token_i + std_get_url(t, token, token_i); /* keep start */
+            ts->t = std_get_url(t, token, token_i, &len); /* keep start */
         }
-        ts->t = t + len;
-        token[len] = 0;
-        return tk_set(&(CTS(ts)->token), token, len, (off_t)(start - ts->text),
+        return tk_set(&(CTS(ts)->token), token, len,
+                      (off_t)(start - ts->text),
                (off_t)(ts->t - ts->text), 1);
     }
 
@@ -1301,7 +1310,7 @@ TokenStream *hyphen_filter_new(TokenStream *sub_ts)
  ****************************************************************************/
 
 
-Token *mb_lcf_next(TokenStream *ts)
+static Token *mb_lcf_next(TokenStream *ts)
 {
     wchar_t wbuf[MAX_WORD_SIZE + 1], *wchr;
     Token *tk = TkFilt(ts)->sub_ts->next(TkFilt(ts)->sub_ts);
@@ -1334,7 +1343,7 @@ TokenStream *mb_lowercase_filter_new(TokenStream *sub_ts)
     return ts;
 }
 
-Token *lcf_next(TokenStream *ts)
+static Token *lcf_next(TokenStream *ts)
 {
     int i = 0;
     Token *tk = TkFilt(ts)->sub_ts->next(TkFilt(ts)->sub_ts);
@@ -1361,7 +1370,7 @@ TokenStream *lowercase_filter_new(TokenStream *sub_ts)
 
 #define StemFilt(filter) ((StemFilter *)(filter))
 
-void stemf_destroy_i(TokenStream *ts)
+static void stemf_destroy_i(TokenStream *ts)
 {
     sb_stemmer_delete(StemFilt(ts)->stemmer);
     free(StemFilt(ts)->algorithm);
@@ -1369,7 +1378,7 @@ void stemf_destroy_i(TokenStream *ts)
     filter_destroy_i(ts);
 }
 
-Token *stemf_next(TokenStream *ts)
+static Token *stemf_next(TokenStream *ts)
 {
     int len;
     const sb_symbol *stemmed;
@@ -1391,7 +1400,7 @@ Token *stemf_next(TokenStream *ts)
     return tk;
 }
 
-TokenStream *stemf_clone_i(TokenStream *orig_ts)
+static TokenStream *stemf_clone_i(TokenStream *orig_ts)
 {
     TokenStream *new_ts      = filter_clone_size(orig_ts, sizeof(StemFilter));
     StemFilter *stemf        = StemFilt(new_ts);
@@ -1409,10 +1418,35 @@ TokenStream *stem_filter_new(TokenStream *ts, const char *algorithm,
                              const char *charenc)
 {
     TokenStream *tf = tf_new(StemFilter, ts);
+    char *my_algorithm = NULL;
+    char *my_charenc   = NULL;
+    char *s = NULL;
 
-    StemFilt(tf)->stemmer   = sb_stemmer_new(algorithm, charenc);
-    StemFilt(tf)->algorithm = algorithm ? estrdup(algorithm) : NULL;
-    StemFilt(tf)->charenc   = charenc ? estrdup(charenc) : NULL;
+    if (algorithm) {
+        my_algorithm = estrdup(algorithm);
+
+        /* algorithms are lowercase */
+        s = my_algorithm;
+        while (*s) {
+            *s = tolower(*s);
+            s++;
+        }
+        StemFilt(tf)->algorithm = my_algorithm;
+    }
+
+    if (charenc) {
+        my_charenc   = estrdup(charenc);
+
+        /* encodings are uppercase and use '_' instead of '-' */
+        s = my_charenc;
+        while (*s) {
+            *s = (*s == '-') ? '_' : toupper(*s);
+            s++;
+        }
+        StemFilt(tf)->charenc = my_charenc;
+    }
+
+    StemFilt(tf)->stemmer   = sb_stemmer_new(my_algorithm, my_charenc);
 
     tf->next = &stemf_next;
     tf->destroy_i = &stemf_destroy_i;
@@ -1492,8 +1526,7 @@ Analyzer *mb_standard_analyzer_new(bool lowercase)
  *
  ****************************************************************************/
 
-#define PFA(analyzer) ((PerFieldAnalyzer *)(analyzer))
-void pfa_destroy_i(Analyzer *self)
+static void pfa_destroy_i(Analyzer *self)
 {
     h_destroy(PFA(self)->dict);
 
@@ -1501,16 +1534,16 @@ void pfa_destroy_i(Analyzer *self)
     free(self);
 }
 
-TokenStream *pfa_get_ts(Analyzer *self, char *field, char *text)
+static TokenStream *pfa_get_ts(Analyzer *self, char *field, char *text)
 {
-    Analyzer *a = h_get(PFA(self)->dict, field);
+    Analyzer *a = (Analyzer *)h_get(PFA(self)->dict, field);
     if (a == NULL) {
         a = PFA(self)->default_a;
     }
     return a_get_ts(a, field, text);
 }
 
-void pfa_sub_a_destroy_i(void *p)
+static void pfa_sub_a_destroy_i(void *p)
 {
     Analyzer *a = (Analyzer *) p;
     a_deref(a);
