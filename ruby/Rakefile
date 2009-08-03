@@ -174,7 +174,6 @@ end
 PKG_FILES = FileList[
   'setup.rb',
   '[-A-Z]*',
-  'ext/**/*.[ch]', 
   'lib/**/*.rb', 
   'lib/**/*.rhtml', 
   'lib/**/*.css', 
@@ -182,7 +181,8 @@ PKG_FILES = FileList[
   'test/**/*.rb',
   'test/**/wordfile',
   'rake_utils/**/*.rb',
-  'Rakefile'
+  'Rakefile',
+  SRC
 ]
 PKG_FILES.exclude('**/*.o')
 PKG_FILES.exclude('**/Makefile')
