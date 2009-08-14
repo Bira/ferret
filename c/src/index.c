@@ -206,7 +206,7 @@ HashTable *co_hash_create()
  *
  ****************************************************************************/
 
-INLINE void fi_set_store(FieldInfo *fi, int store)
+static INLINE void fi_set_store(FieldInfo *fi, int store)
 {
     switch (store) {
         case STORE_NO:
@@ -220,7 +220,7 @@ INLINE void fi_set_store(FieldInfo *fi, int store)
     }
 }
 
-INLINE void fi_set_index(FieldInfo *fi, int index)
+static INLINE void fi_set_index(FieldInfo *fi, int index)
 {
     switch (index) {
         case INDEX_NO:
@@ -241,7 +241,7 @@ INLINE void fi_set_index(FieldInfo *fi, int index)
     }
 }
 
-INLINE void fi_set_term_vector(FieldInfo *fi, int term_vector)
+static INLINE void fi_set_term_vector(FieldInfo *fi, int term_vector)
 {
     switch (term_vector) {
         case TERM_VECTOR_NO:
