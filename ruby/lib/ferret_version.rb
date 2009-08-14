@@ -1,3 +1,3 @@
 module Ferret
-  VERSION = '0.11.6.1'
+  VERSION = '0.11.6.2'
 end
